@@ -18,7 +18,6 @@ type RegistryOptions struct {
 
 // Service 具体的服务
 type Service struct {
-	Namespace string
 	// Name 服务名称
 	Name string
 	// Nodes 下面的所有可请求的节点
@@ -47,7 +46,6 @@ func (n *NacosRegistry) Register(s *Service) error {
 	param.Healthy = true
 	param.Weight = 1.0
 	param.Ephemeral = true
-	param.GroupName = s.Namespace
 	_, err := n.client.client.RegisterInstance(param)
 	return err
 }
@@ -56,31 +54,43 @@ func (n *NacosRegistry) DeRegister(s *Service) error {
 	param := vo.DeregisterInstanceParam{}
 	param.Ip, param.Port = n.splitIpPort(s)
 	param.ServiceName = s.Name
-	param.GroupName = s.Namespace
 	_, err := n.client.client.DeregisterInstance(param)
 	return err
 }
 
-func (n *NacosRegistry) ListNodes(s *Service) ([]*Node, error) {
+func (n *NacosRegistry) ListNodes(serviceName string) ([]*Node, error) {
 	param := vo.SelectAllInstancesParam{
-		ServiceName: s.Name,
-		GroupName:   s.Namespace,
+		ServiceName: serviceName,
 	}
-	nodes, err := n.client.client.SelectAllInstances(param)
+	_nodes, err := n.client.client.SelectAllInstances(param)
 	if err != nil {
 		return nil, err
 	}
-	if len(nodes) == 0 {
+	if len(_nodes) == 0 {
 		return nil, nil
 	}
-	s.Nodes = make([]*Node, 0)
-	for _, node := range nodes {
-		s.Nodes = append(s.Nodes, &Node{
+	nodes := make([]*Node, 0)
+	for _, node := range _nodes {
+		nodes = append(nodes, &Node{
 			Id:      node.InstanceId,
 			Address: n.joinIpPort(node.Ip, node.Port),
 		})
 	}
-	return s.Nodes, nil
+	return nodes, nil
+}
+
+func (n *NacosRegistry) HealthNode(serviceName string) (*Node, error) {
+	param := vo.SelectOneHealthInstanceParam{
+		ServiceName: serviceName,
+	}
+	_node, err := n.client.client.SelectOneHealthyInstance(param)
+	if err != nil {
+		return nil, err
+	}
+	node := new(Node)
+	node.Id = _node.InstanceId
+	node.Address = n.joinIpPort(_node.Ip, _node.Port)
+	return node, nil
 }
 
 func (n *NacosRegistry) splitIpPort(s *Service) (string, uint64) {
@@ -94,6 +104,6 @@ func (n *NacosRegistry) joinIpPort(ip string, port uint64) string {
 	return net.JoinHostPort(ip, portStr)
 }
 
-func (n *NacosRegistry) Watch(namespace string) (Watcher, error) {
-	return NewNacosWatcher(n, namespace)
+func (n *NacosRegistry) Watch(serviceName string) (Watcher, error) {
+	return NewNacosWatcher(n, serviceName)
 }

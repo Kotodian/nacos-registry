@@ -9,45 +9,51 @@ import (
 )
 
 type Client struct {
-	client naming_client.INamingClient
+	client    naming_client.INamingClient
+	namespace string
 }
 
 type Config struct {
 	// nacos client config
-	clientConfig *constant.ClientConfig
+	clientConfig constant.ClientConfig
 	// naocs server configs
-	serverConfigs []*constant.ServerConfig
+	serverConfigs []constant.ServerConfig
 }
 
-func newClientConfig(namespaceId string, timeout uint64, urls ...url.URL) *Config {
+func NewClientConfig(namespace string, timeout uint64, urls ...url.URL) *Config {
 	if len(urls) == 0 {
 		return nil
 	}
 	config := new(Config)
 	// 初始化 nacos client配置
 	clientConfig := constant.NewClientConfig(
-		constant.WithNamespaceId(namespaceId),
 		constant.WithTimeoutMs(timeout),
+		constant.WithNamespaceId(namespace),
+		constant.WithUsername("nacos"),
+		constant.WithPassword("nacos"),
+		constant.WithBeatInterval(1000),
+		constant.WithNotLoadCacheAtStart(true),
 	)
-	config.clientConfig = clientConfig
+	config.clientConfig = *clientConfig
 	// 初始化nacos server配置
-	config.serverConfigs = make([]*constant.ServerConfig, 0)
+	config.serverConfigs = make([]constant.ServerConfig, 0)
 	for _, u := range urls {
 		port, _ := strconv.ParseUint(u.Port(), 10, 64)
-		config.serverConfigs = append(config.serverConfigs, constant.NewServerConfig(u.Host, port))
+		config.serverConfigs = append(config.serverConfigs, *constant.NewServerConfig(u.Hostname(), port))
 	}
 	return config
 }
 
-func newClientFromConfig(config *Config) (*Client, error) {
+func NewClientFromConfig(config *Config) (*Client, error) {
 	client := new(Client)
 	namingClient, err := clients.CreateNamingClient(map[string]interface{}{
-		"serverConfigs": config.serverConfigs,
-		"clientConfig":  config.clientConfig,
+		constant.KEY_SERVER_CONFIGS: config.serverConfigs,
+		constant.KEY_CLIENT_CONFIG:  config.clientConfig,
 	})
 	if err != nil {
 		return nil, err
 	}
 	client.client = namingClient
+	client.namespace = config.clientConfig.NamespaceId
 	return client, err
 }
