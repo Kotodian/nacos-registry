@@ -8,8 +8,9 @@ import (
 	"time"
 )
 
+type EventHandler func(event *Result)
 type Watcher interface {
-	Next() (*Result, error)
+	Next(...EventHandler)
 	Stop()
 }
 
@@ -133,15 +134,18 @@ func (n *nacosWatcher) callback(services []model.SubscribeService, err error) {
 		}
 	}
 }
-func (n *nacosWatcher) Next() (*Result, error) {
+func (n *nacosWatcher) Next(handlers ...EventHandler) {
 	select {
 	case <-n.exit:
-		return nil, nil
+		return
 	case r, ok := <-n.next:
 		if !ok {
-			return nil, nil
+			return
 		}
-		return r, nil
+		for _, handler := range handlers {
+			handler(r)
+		}
+		return
 	}
 }
 
